@@ -1,0 +1,53 @@
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Optional cache folders
+.cache/
+dist/
+build/
+.tmp/
+
+# Coverage reports
+coverage/
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Debugger
+*.pid
+
+# MongoDB local database dump
+dump/
+
+# PM2 logs (if used)
+pids/
+*.pid
+*.seed
+ecosystem.config.js
+
+# Testing
+jest.config.js
+.nyc_output/
+
+# Misc
+*.tgz
+*.bak
