@@ -234,6 +234,6 @@ npm run dev
 
 ## 👌 Author
 
-Made with ❤️ by [Your Name](https://github.com/Dhruvil316)
+Made with ❤️ by [https://github.com/Dhruvil316]
 
 If you found this helpful, star the repo ⭐ and share it!
