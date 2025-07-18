@@ -7,13 +7,15 @@ import {
   signRefreshToken,
   verifyRefreshToken,
   generateAntiCsrfToken,
-  verifyAntiCsrfToken
 } from "../utils/jwt.js";
 import { createAuthCookies, clearAuthCookies } from "../utils/cookies.js";
 import { resetLimiter } from "../utils/rateLimit.js";
-
+import { authenticate } from "../middleware/auth.js";
+import jwt from "jsonwebtoken";
+import { log } from "console";
 const router = express.Router();
 const ORIGIN = process.env.FRONTEND_ORIGIN;
+const CSRF_SECRET = process.env.CSRF_SECRET;
 
 // Signup
 router.post("/signup", async (req, res) => {
@@ -53,10 +55,9 @@ router.post("/login", async (req, res) => {
   try {
     const u = await User.findOne({ email });
 
-    console.log(u);
-
     if (!u || !(await bcrypt.compare(password, u.passwordHash)))
-      return res.status(401).json({ error: "Invalid credentials" });
+      // return res.status(401).json({ error: "Invalid credentials" });
+      return res.status(401).json({ error: "INVALID_CREDENTIALS", message: "invalid credentials" });
 
     const sessionId = crypto.randomUUID();
     u.sessionId = sessionId;
@@ -78,9 +79,28 @@ router.post("/login", async (req, res) => {
       cookies.refreshToken.options
     );
 
-    res.setHeader("Access-Control-Allow-Origin", ORIGIN);
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.json({ antiCsrfToken });
+    // res.setHeader("Access-Control-Allow-Origin", ORIGIN);
+    // res.setHeader("Access-Control-Allow-Credentials", "true");
+
+    console.log("====================================");
+    console.log({
+      antiCsrfToken,
+      user: {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+      },
+    });
+    console.log("====================================");
+
+    return res.json({
+      antiCsrfToken,
+      user: {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+      },
+    });
   } catch (e) {
     console.log(e);
     res.status(500).json({ error: "Server error" });
@@ -91,41 +111,53 @@ router.post("/login", async (req, res) => {
 router.post("/refresh", async (req, res) => {
   const { refreshToken } = req.cookies;
   const csrf = req.headers["x-csrf-token"]?.toString().trim();
-  if (!refreshToken || !csrf)
+
+  if (!refreshToken || !csrf) {
     return res.status(401).json({ error: "Missing auth" });
+  }
 
   try {
+    // ✅ Verify refreshToken normally
     const decodedRefresh = verifyRefreshToken(refreshToken);
-    const decodedCsrf = verifyAntiCsrfToken(csrf);
 
+    // ✅ Hybrid: Verify CSRF signature but ignore expiration
+    let decodedCsrf;
+    try {
+      decodedCsrf = jwt.verify(csrf, CSRF_SECRET, { ignoreExpiration: true });
+    } catch (err) {
+      return res.status(403).json({ error: "Invalid CSRF token signature" });
+    }
+
+    // ✅ Match user and session between refresh token and CSRF token
     if (
       decodedRefresh.sub !== decodedCsrf.sub ||
       decodedRefresh.sessionId !== decodedCsrf.sessionId
     ) {
-      return res.status(403).json({ error: "Invalid CSRF token" });
+      return res.status(403).json({ error: "CSRF session mismatch" });
     }
 
+    // ✅ Find user and validate session
     const u = await User.findById(decodedRefresh.sub);
     if (!u || u.sessionId !== decodedRefresh.sessionId) {
       return res.status(403).json({ error: "Invalid session" });
     }
 
+    // 🔄 Generate new tokens
     const accessToken = signAccessToken({ sub: u.id, role: u.role });
     const refreshToken2 = signRefreshToken({
       sub: u.id,
       sessionId: u.sessionId,
     });
-
     const newCsrfToken = generateAntiCsrfToken({
       sub: u.id,
       sessionId: u.sessionId,
     });
 
+    // 🍪 Set cookies
     const cookies = createAuthCookies({
       accessToken,
       refreshToken: refreshToken2,
     });
-
     res.cookie(
       "accessToken",
       cookies.accessToken.value,
@@ -137,10 +169,15 @@ router.post("/refresh", async (req, res) => {
       cookies.refreshToken.options
     );
 
-    res.setHeader("Access-Control-Allow-Origin", ORIGIN);
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-
-    return res.json({ antiCsrfToken: newCsrfToken });
+    // ✅ Return new anti-CSRF token
+    return res.json({
+      antiCsrfToken: newCsrfToken,
+      user: {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+      },
+    });
   } catch (err) {
     console.error("Refresh error:", err);
     return res.status(401).json({ error: "Invalid refresh" });
@@ -178,8 +215,8 @@ router.post("/logout", async (req, res) => {
         cookies.refreshToken.options
       );
 
-      res.setHeader("Access-Control-Allow-Origin", ORIGIN);
-      res.setHeader("Access-Control-Allow-Credentials", "true");
+      // res.setHeader("Access-Control-Allow-Origin", ORIGIN);
+      // res.setHeader("Access-Control-Allow-Credentials", "true");
 
       return res.status(200).json({ message: "Logout successful" });
     } else {
@@ -198,8 +235,8 @@ router.post("/logout", async (req, res) => {
       cookies.refreshToken.options
     );
 
-    res.setHeader("Access-Control-Allow-Origin", ORIGIN);
-    res.setHeader("Access-Control-Allow-Credentials", "true");
+    // res.setHeader("Access-Control-Allow-Origin", ORIGIN);
+    // res.setHeader("Access-Control-Allow-Credentials", "true");
 
     return res.status(400).json({ error: err.message || "Logout failed" });
   }
@@ -236,7 +273,9 @@ router.post("/reset-password", async (req, res) => {
   const { token, newPassword } = req.body;
 
   if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters" });
+    return res
+      .status(400)
+      .json({ error: "Password must be at least 6 characters" });
   }
 
   const u = await User.findOne({
@@ -255,5 +294,22 @@ router.post("/reset-password", async (req, res) => {
   res.json({ message: "Password reset successful" });
 });
 
+let count = 0 ; 
+// get new CSRF
+router.get("/session", authenticate(), (req, res) => {
+  count++;
+  console.log("session called " , count , " times");
+  const newCsrf = generateAntiCsrfToken({
+    sub: req.user.id,
+    sessionId: req.user.sessionId,
+  });
+  res.json({
+    antiCsrfToken: newCsrf,
+    user: {
+      email: req.user.email,
+      role: req.user.role,
+    },
+  });
+});
 
 export default router;
