@@ -14,6 +14,7 @@ A production-ready authentication and authorization system built with **Node.js*
 * 📧 **Password Reset with Secure Tokens**
 * ❌ **Logout with Session Invalidation**
 * 📈 Designed for **cross-origin** frontend (Next.js/React/Vue)
+* 🧃 **Rate Limiting** to Throttle Abuse and Brute-force Attacks
 
 ---
 
