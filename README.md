@@ -236,5 +236,6 @@ npm run dev
 ## 👌 Author
 
 Made with ❤️ by [https://github.com/Dhruvil316]
+Frontend Implementation: [https://github.com/Dhruvil316/Vite-authentication-authorisation-frontend]
 
 If you found this helpful, star the repo ⭐ and share it!
